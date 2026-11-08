@@ -342,6 +342,10 @@ export class PlanScene extends Phaser.Scene {
         // the zone is a container child, so Phaser's dragX/dragY are its local position: an offset
         // from where the drag started (the zone sits at the container's origin)
         t.container.setPosition(Math.round(t.dragFrom.x + dx), Math.round(t.dragFrom.y + dy));
+        for (const g of this.store.guestsAt(t.id)) {
+          const ch = this.characters.get(g._id);
+          if (ch && ch.sitting) this.placeCharacter(ch, g, true);
+        }
         this.drawHighlight();
         return;
       }

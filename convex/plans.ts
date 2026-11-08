@@ -74,6 +74,29 @@ export const addTable = mutation({
   },
 });
 
+/**
+ * Places a preset layout in one transaction. Tables whose name the plan already has are skipped,
+ * so loading a draft twice adds nothing. Returns how many were added.
+ */
+export const addTables = mutation({
+  args: {
+    slug: v.string(),
+    tables: v.array(v.object({ name: v.string(), shape, seats: v.number(), x: v.number(), y: v.number(), rotation: v.number() })),
+  },
+  handler: async (ctx, { slug, tables }) => {
+    const planId = await ensurePlan(ctx, slug);
+    const existing = new Set((await ctx.db.query('tables').withIndex('by_plan', (q) => q.eq('planId', planId)).collect()).map((t) => t.name));
+    let n = 0;
+    for (const t of tables) {
+      if (existing.has(t.name)) continue;
+      existing.add(t.name);
+      await ctx.db.insert('tables', { planId, name: t.name, shape: t.shape, seats: clampSeats(t.seats), x: t.x, y: t.y, rotation: t.rotation });
+      n++;
+    }
+    return n;
+  },
+});
+
 export const moveTable = mutation({
   args: { slug: v.string(), tableId: v.id('tables'), x: v.number(), y: v.number() },
   handler: async (ctx, { slug, tableId, x, y }) => {

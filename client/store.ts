@@ -87,6 +87,9 @@ export class Store {
   addTable(shape: Shape, seats: number, x: number, y: number, rotation = 0, name?: string) {
     return this.run(this.client.mutation(api.plans.addTable, { slug: this.slug, shape, seats, x, y, rotation, name }));
   }
+  addTables(tables: { name: string; shape: Shape; seats: number; x: number; y: number; rotation: number }[]) {
+    return this.run(this.client.mutation(api.plans.addTables, { slug: this.slug, tables }));
+  }
   moveTable(tableId: Id<'tables'>, x: number, y: number) {
     return this.run(this.client.mutation(api.plans.moveTable, { slug: this.slug, tableId, x, y }));
   }

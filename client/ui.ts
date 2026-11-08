@@ -87,12 +87,17 @@ export function bindUi(store: Store) {
     const id = await store.addTable('rect', 8, c.x, c.y, 0);
     if (id) scene?.select(id as Id<'tables'>);
   };
-  $('loadDraft').onclick = async () => {
-    const existing = state.tables.length;
-    if (existing && !confirm(`Add the venue's draft layout (${CALILE_DRAFT.length} tables) alongside the ${existing} already placed?`)) return;
-    for (const t of CALILE_DRAFT) await store.addTable(t.shape, t.seats, t.x, t.y, t.rotation, t.name);
-    say(`Placed ${CALILE_DRAFT.length} tables from the Calile draft`);
-    scene?.fit();
+  const loadDraft = $<HTMLButtonElement>('loadDraft');
+  loadDraft.onclick = async () => {
+    loadDraft.disabled = true;
+    try {
+      // one transaction; tables the plan already has (by name) are left alone
+      const n = await store.addTables(CALILE_DRAFT.map((t) => ({ ...t })));
+      say(n ? `Placed ${n} tables from the Calile draft` : 'The Calile draft is already on this plan');
+      if (n) scene?.fit();
+    } finally {
+      loadDraft.disabled = false;
+    }
   };
   $('fit').onclick = () => scene?.fit();
   $('plan').onclick = () => { scene?.togglePlan(); $('plan').classList.toggle('on'); };
