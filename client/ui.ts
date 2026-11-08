@@ -27,18 +27,19 @@ export function bindUi(store: Store) {
   };
 
   // ---------- avatars for the list ----------
-  const avatars = new Map<number, string>();
-  const avatarFor = (look: number): string => {
-    let url = avatars.get(look);
+  const avatars = new Map<string, string>();
+  const avatarFor = (g: Guest): string => {
+    const k = `${g.look}:${g.style ?? ''}`;
+    let url = avatars.get(k);
     if (!url) {
-      const sheet = renderSheet(lookFor(look));
+      const sheet = renderSheet(lookFor(g.look, g.style));
       const c = document.createElement('canvas');
       c.width = FRAME_W; c.height = FRAME_H;
       const ctx = c.getContext('2d')!;
       ctx.drawImage(sheet, 0, rowFor('idle', 'down') * FRAME_H, FRAME_W, FRAME_H, 0, 0, FRAME_W, FRAME_H);
       void FRAMES;
       url = c.toDataURL();
-      avatars.set(look, url);
+      avatars.set(k, url);
     }
     return url;
   };
@@ -173,7 +174,7 @@ export function bindUi(store: Store) {
     el.className = 'chip' + (selectedGuest === g._id ? ' selected' : '');
     const img = document.createElement('img');
     img.className = 'avatar';
-    img.src = avatarFor(g.look);
+    img.src = avatarFor(g);
     img.draggable = false;
     const name = document.createElement('span');
     name.className = 'name';
@@ -182,6 +183,15 @@ export function bindUi(store: Store) {
     const where = document.createElement('span');
     where.className = 'where';
     where.textContent = t ? `${t.name} · ${(g.seat ?? 0) + 1}` : '';
+    const st = document.createElement('button');
+    st.className = 'x style';
+    st.textContent = g.style === 'fem' ? '♀' : g.style === 'masc' ? '♂' : '◐';
+    st.title = `Look: ${g.style === 'fem' ? 'feminine' : g.style === 'masc' ? 'masculine' : 'auto'} · click to change`;
+    st.onclick = (e) => {
+      e.stopPropagation();
+      const next = g.style === 'fem' ? 'masc' : g.style === 'masc' ? null : 'fem';
+      void store.setGuestStyle(g._id, next);
+    };
     const x = document.createElement('button');
     x.className = 'x';
     x.textContent = '×';
@@ -191,7 +201,7 @@ export function bindUi(store: Store) {
       if (t) void store.unseatGuest(g._id);
       else if (confirm(`Remove ${g.name} from the guest list?`)) void store.removeGuest(g._id);
     };
-    el.append(img, name, where, x);
+    el.append(img, name, where, st, x);
     name.ondblclick = (e) => {
       e.stopPropagation();
       const n = prompt('Rename guest', g.name);

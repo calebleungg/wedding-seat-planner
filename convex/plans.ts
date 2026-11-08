@@ -1,7 +1,7 @@
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
-import { shape } from './schema';
+import { shape, style } from './schema';
 
 export const MIN_SEATS = 0;
 export const MAX_SEATS = 20;
@@ -123,12 +123,38 @@ export const removeTable = mutation({
 });
 
 export const addGuest = mutation({
-  args: { slug: v.string(), name: v.string() },
-  handler: async (ctx, { slug, name }) => {
+  args: { slug: v.string(), name: v.string(), style: v.optional(style) },
+  handler: async (ctx, { slug, name, style }) => {
     const planId = await ensurePlan(ctx, slug);
     const clean = name.trim();
     if (!clean) throw new Error('a guest needs a name');
-    return ctx.db.insert('guests', { planId, name: clean, look: Math.floor(Math.random() * 1_000_000) });
+    return ctx.db.insert('guests', { planId, name: clean, look: Math.floor(Math.random() * 1_000_000), style });
+  },
+});
+
+/** Sets how a guest's character dresses; null goes back to the look number's own choice. */
+export const setGuestStyle = mutation({
+  args: { slug: v.string(), guestId: v.id('guests'), style: v.union(style, v.null()) },
+  handler: async (ctx, { slug, guestId, style }) => {
+    const planId = await ensurePlan(ctx, slug);
+    await guestInPlan(ctx, planId, guestId);
+    await ctx.db.patch(guestId, { style: style ?? undefined });
+  },
+});
+
+/** The same for many guests at once, matched by exact name. Returns the names not found. */
+export const setGuestStyles = mutation({
+  args: { slug: v.string(), items: v.array(v.object({ name: v.string(), style: v.union(style, v.null()) })) },
+  handler: async (ctx, { slug, items }) => {
+    const planId = await ensurePlan(ctx, slug);
+    const guests = await ctx.db.query('guests').withIndex('by_plan', (q) => q.eq('planId', planId)).collect();
+    const missing: string[] = [];
+    for (const item of items) {
+      const g = guests.find((x) => x.name === item.name);
+      if (!g) { missing.push(item.name); continue; }
+      await ctx.db.patch(g._id, { style: item.style ?? undefined });
+    }
+    return missing;
   },
 });
 

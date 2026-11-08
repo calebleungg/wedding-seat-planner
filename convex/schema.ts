@@ -4,6 +4,8 @@ import { v } from 'convex/values';
 // A plan is one seating chart, addressed by a slug in the page URL. Tables sit on the venue floor in
 // world pixels; guests either have a table and seat index or are waiting in the guest list.
 export const shape = v.union(v.literal('round'), v.literal('rect'));
+/** How a guest's character dresses: feminine, masculine, or whatever the look number gives. */
+export const style = v.union(v.literal('fem'), v.literal('masc'));
 
 export default defineSchema({
   plans: defineTable({
@@ -29,6 +31,7 @@ export default defineSchema({
     seat: v.optional(v.number()),
     // picks the character's look, fixed for the guest's lifetime
     look: v.number(),
+    style: v.optional(style),
   })
     .index('by_plan', ['planId'])
     .index('by_table', ['tableId']),

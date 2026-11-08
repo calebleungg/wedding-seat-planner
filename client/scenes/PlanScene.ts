@@ -614,10 +614,10 @@ export class PlanScene extends Phaser.Scene {
 
   // ---------- characters ----------
 
-  private sheetFor(look: number): string {
-    const key = `guest_${look}`;
+  private sheetFor(g: Guest): string {
+    const key = `guest_${g.look}_${g.style ?? 'auto'}`;
     if (!this.textures.exists(key)) {
-      const canvas = renderSheet(lookFor(look));
+      const canvas = renderSheet(lookFor(g.look, g.style));
       const tex = this.textures.addCanvas(key, canvas)!;
       const cols = FRAMES, rows = canvas.height / FRAME_H;
       for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) tex.add(r * cols + c, 0, c * FRAME_W, r * FRAME_H, FRAME_W, FRAME_H);
@@ -638,8 +638,14 @@ export class PlanScene extends Phaser.Scene {
 
   private upsertGuest(g: Guest) {
     let ch = this.characters.get(g._id);
+    if (ch && ch.sheet !== this.sheetFor(g)) {
+      // a new look: swap the sheet in place
+      ch.sheet = this.sheetFor(g);
+      ch.sprite.setTexture(ch.sheet);
+      if (ch.sitting) this.sit(ch, ch.facing);
+    }
     if (!ch) {
-      const sheet = this.sheetFor(g.look);
+      const sheet = this.sheetFor(g);
       if (!g.tableId) return; // unseated guests live in the list, not on the floor
       const sprite = this.add.sprite(ENTRY.x, ENTRY.y, sheet).setOrigin(0.5, 1);
       sprite.setData('guestId', g._id);

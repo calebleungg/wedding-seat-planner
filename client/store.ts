@@ -114,6 +114,9 @@ export class Store {
   unseatGuest(guestId: Id<'guests'>) {
     return this.run(this.client.mutation(api.plans.unseatGuest, { slug: this.slug, guestId }));
   }
+  setGuestStyle(guestId: Id<'guests'>, style: 'fem' | 'masc' | null) {
+    return this.run(this.client.mutation(api.plans.setGuestStyle, { slug: this.slug, guestId, style }));
+  }
   renamePlan(name: string) {
     return this.run(this.client.mutation(api.plans.renamePlan, { slug: this.slug, name }));
   }

@@ -45,11 +45,24 @@ function rng(seed: number) {
   };
 }
 
-export function lookFor(seed: number): Look {
+export type Style = 'fem' | 'masc';
+
+/**
+ * The look for a seed. With a style, the outfit and hair are drawn from that style's wardrobe
+ * (dresses, gowns and longer hair; or suits, shirts and shorter hair) while skin, colours and
+ * accessories still come from the seed, so setting a style keeps the rest of the character.
+ */
+export function lookFor(seed: number, style?: Style | null): Look {
   const r = rng(seed * 2654435761 + 12345);
   const pick = <T,>(xs: T[]) => xs[Math.floor(r() * xs.length)];
-  const outfit = pick<Look['outfit']>(['suit', 'suit', 'dress', 'dress', 'shirt', 'gown']);
-  const hairStyle = pick<Look['hairStyle']>(['short', 'short', 'long', 'bun', 'curly', 'bob', 'bald']);
+  let outfit = pick<Look['outfit']>(['suit', 'suit', 'dress', 'dress', 'shirt', 'gown']);
+  let hairStyle = pick<Look['hairStyle']>(['short', 'short', 'long', 'bun', 'curly', 'bob', 'bald']);
+  if (style) {
+    const r2 = rng(seed * 40503 + (style === 'fem' ? 7 : 11));
+    const pick2 = <T,>(xs: T[]) => xs[Math.floor(r2() * xs.length)];
+    outfit = style === 'fem' ? pick2<Look['outfit']>(['dress', 'dress', 'gown', 'shirt']) : pick2<Look['outfit']>(['suit', 'suit', 'suit', 'shirt']);
+    hairStyle = style === 'fem' ? pick2<Look['hairStyle']>(['long', 'long', 'bun', 'bob', 'curly', 'short']) : pick2<Look['hairStyle']>(['short', 'short', 'short', 'curly', 'bald']);
+  }
   const cloth = outfit === 'suit' ? pick(SUITS) : outfit === 'shirt' ? pick(SHIRTS) : pick(DRESSES);
   return {
     skin: pick(SKINS),
