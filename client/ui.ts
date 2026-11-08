@@ -5,6 +5,7 @@ import type { PlanScene, SceneEvents } from './scenes/PlanScene';
 import type { Guest, PlanState, Store, Table } from './store';
 import { CALILE_DRAFT, WORLD } from './venue';
 import { chairSide, nextSides, turned } from './tables';
+import { exportFileName, planToCsv, planToJson } from './export';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -104,6 +105,26 @@ export function bindUi(store: Store) {
   };
   $('fit').onclick = () => scene?.fit();
   $('plan').onclick = () => { scene?.togglePlan(); $('plan').classList.toggle('on'); };
+  // Snapshots are built from the state already on this client, so nothing is sent to the server.
+  const download = (name: string, body: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([body], { type }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  $('exportJson').onclick = () => {
+    if (!store.connected) { say('Still connecting, try again in a moment'); return; }
+    const now = new Date();
+    download(exportFileName(state, store.slug, 'json', now), JSON.stringify(planToJson(state, store.slug, now), null, 2), 'application/json');
+    say(`Saved a snapshot: ${state.tables.length} tables, ${state.guests.length} guests`);
+  };
+  $('exportCsv').onclick = () => {
+    if (!store.connected) { say('Still connecting, try again in a moment'); return; }
+    download(exportFileName(state, store.slug, 'csv'), planToCsv(state), 'text/csv');
+    say('Exported the seating list');
+  };
   $('share').onclick = async () => {
     const url = new URL(location.href);
     url.searchParams.set('plan', store.slug);
