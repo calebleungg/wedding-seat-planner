@@ -1,0 +1,27 @@
+{
+  "name": "wedding-seat-planner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A top-down pixel wedding seating planner: place round and rectangular tables on the venue floor plan, seat guests, and watch them take their seats.",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n convex,client -c blue,magenta \"npx convex dev\" \"vite --config client/vite.config.ts\"",
+    "dev:client": "vite --config client/vite.config.ts",
+    "build": "vite build --config client/vite.config.ts",
+    "preview": "vite preview --config client/vite.config.ts",
+    "typecheck": "tsc -p client/tsconfig.json --noEmit && tsc -p convex/tsconfig.json --noEmit",
+    "test": "node --import tsx --test client/*.test.ts",
+    "deploy:convex": "convex deploy"
+  },
+  "dependencies": {
+    "convex": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "concurrently": "^9.1.2",
+    "phaser": "^3.90.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0"
+  }
+}

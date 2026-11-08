@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Seat Planner</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='11' fill='%23f7f2e8' stroke='%23e8c170' stroke-width='3'/><circle cx='16' cy='16' r='3' fill='%23f2a1b0'/></svg>" />
+    <style>
+      :root {
+        --font: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+        --panel: rgba(22, 22, 30, 0.94);
+        --ink: #e9ecf1;
+        --muted: #9aa0ad;
+        --gold: #e8c170;
+        --blush: #f2a1b0;
+        --line: rgba(255,255,255,.08);
+      }
+      html, body { margin: 0; height: 100%; background: #1b1b22; overflow: hidden; color: var(--ink); font: 13px/1.4 var(--font); }
+      #game { position: fixed; inset: 0; }
+      canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+      #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.35) 100%); }
+
+      button {
+        font: 12px var(--font); color: var(--ink); background: rgba(255,255,255,.08);
+        border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 5px 10px; cursor: pointer; white-space: nowrap;
+      }
+      button:hover { background: rgba(255,255,255,.14); }
+      button.on, button.primary { background: var(--gold); color: #1b1b22; border-color: var(--gold); font-weight: 600; }
+      button.danger:hover { background: #c0392b; border-color: #c0392b; }
+      button:disabled { opacity: .45; cursor: default; }
+      input, textarea, select {
+        font: 13px var(--font); color: var(--ink); background: rgba(255,255,255,.06);
+        border: 1px solid rgba(255,255,255,.14); border-radius: 8px; padding: 6px 8px; outline: none; box-sizing: border-box;
+      }
+      input:focus, textarea:focus { border-color: var(--gold); }
+      .panel { position: fixed; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+      .kind { font: 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+      /* top bar */
+      #topbar { top: 12px; left: 12px; right: 12px; height: 46px; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+      #topbar h1 { margin: 0 8px 0 0; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+      #topbar h1 span { color: var(--blush); }
+      #topbar .sep { width: 1px; height: 24px; background: var(--line); margin: 0 4px; }
+      #topbar .grow { flex: 1; }
+      #planName { width: 200px; }
+      #status { font: 11px var(--mono); color: var(--muted); }
+      #status.err { color: #ff8a8a; }
+
+      /* guest list */
+      #guests { top: 70px; left: 12px; bottom: 12px; width: 272px; display: flex; flex-direction: column; }
+      #guests header { padding: 12px 14px 8px; border-bottom: 1px solid var(--line); }
+      #guests header h2 { margin: 2px 0 8px; font-size: 14px; }
+      #guests header h2 small { color: var(--muted); font-weight: 400; margin-left: 6px; font-family: var(--mono); font-size: 11px; }
+      #guests .add { display: flex; gap: 6px; }
+      #guests .add input { flex: 1; min-width: 0; }
+      #guests .tools { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+      #guests .tools input { flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px; }
+      #bulk { display: none; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+      #bulk.open { display: block; }
+      #bulk textarea { width: 100%; height: 110px; resize: vertical; font-family: var(--mono); font-size: 12px; }
+      #bulk .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 6px; }
+      #list { flex: 1; overflow: auto; padding: 8px 10px 12px; }
+      #list .group { margin: 6px 0 2px; font: 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; display: flex; justify-content: space-between; }
+      .chip {
+        display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 3px 0; border-radius: 8px;
+        background: rgba(255,255,255,.05); border: 1px solid transparent; cursor: grab; user-select: none;
+      }
+      .chip:hover { background: rgba(255,255,255,.1); }
+      .chip.selected { border-color: var(--gold); background: rgba(232,193,112,.14); }
+      .chip .avatar { width: 16px; height: 32px; image-rendering: pixelated; flex: none; transform: scale(.9); }
+      .chip .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .chip .where { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+      .chip .x { opacity: 0; border: 0; background: transparent; padding: 0 4px; color: var(--muted); font-size: 14px; }
+      .chip:hover .x { opacity: 1; }
+      .chip .x:hover { color: #ff8a8a; }
+      #list .empty { color: var(--muted); padding: 16px 6px; text-align: center; font-size: 12px; }
+      #ghost {
+        position: fixed; pointer-events: none; display: none; z-index: 50; padding: 4px 10px; border-radius: 8px;
+        background: var(--gold); color: #1b1b22; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,.4); transform: translate(-50%, -140%);
+      }
+
+      /* inspector */
+      #inspector { top: 70px; right: 12px; width: 300px; max-height: calc(100% - 82px); overflow: auto; display: none; }
+      #inspector.open { display: block; }
+      #inspector header { padding: 12px 14px 10px; border-bottom: 1px solid var(--line); position: relative; }
+      #inspector header input { width: calc(100% - 36px); font-size: 15px; font-weight: 600; margin-top: 4px; }
+      #inspector header .close { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 16px; line-height: 1; }
+      #inspector .field { display: grid; grid-template-columns: 76px 1fr; gap: 6px 10px; align-items: center; padding: 6px 14px; }
+      #inspector .field label { color: var(--muted); font: 11px/1.6 var(--mono); }
+      #inspector .seg { display: flex; gap: 4px; }
+      #inspector .seg button { flex: 1; }
+      #inspector .stepper { display: flex; align-items: center; gap: 6px; }
+      #inspector .stepper input { width: 56px; text-align: center; }
+      #inspector .stepper button { width: 30px; padding: 5px 0; }
+      #inspector .seats { padding: 4px 14px 10px; border-top: 1px solid var(--line); margin-top: 6px; }
+      #inspector .seat { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; }
+      #inspector .seat:hover { background: rgba(255,255,255,.06); }
+      #inspector .seat .n { width: 20px; font: 11px var(--mono); color: var(--muted); text-align: right; }
+      #inspector .seat .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #inspector .seat .who.free { color: var(--muted); font-style: italic; }
+      #inspector .seat.target { background: rgba(232,193,112,.16); cursor: pointer; }
+      #inspector .seat .x { opacity: 0; border: 0; background: transparent; padding: 0 4px; color: var(--muted); font-size: 14px; }
+      #inspector .seat:hover .x { opacity: 1; }
+      #inspector footer { display: flex; justify-content: space-between; gap: 6px; padding: 10px 14px 12px; border-top: 1px solid var(--line); }
+
+      #hint { position: fixed; bottom: 10px; left: 296px; right: 12px; color: #8d93a3; pointer-events: none; font: 11px/1.4 var(--mono); text-align: center; }
+      #hint b { color: var(--gold); font-weight: 600; }
+      #hover { position: fixed; display: none; pointer-events: none; z-index: 40; padding: 3px 8px; border-radius: 8px; background: #fff; color: #1b1b22; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.4); white-space: nowrap; }
+      #toast { position: fixed; left: 50%; bottom: 36px; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; display: none; z-index: 60; }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <div id="vignette"></div>
+
+    <div id="topbar" class="panel">
+      <h1>Seat <span>Planner</span></h1>
+      <input id="planName" placeholder="plan name" title="Name this plan" />
+      <div class="sep"></div>
+      <button id="addRound" title="Add a round table">+ round table</button>
+      <button id="addRect" title="Add a rectangular table">+ rectangle table</button>
+      <button id="loadDraft" title="Place the venue's draft layout (FPV2): 13 rounds, the long table, cake and six cocktail tables">load Calile draft</button>
+      <div class="sep"></div>
+      <button id="fit" title="Fit the venue on screen (F)">fit</button>
+      <button id="plan" title="Show the venue's drawing under the floor (P)">plan</button>
+      <div class="grow"></div>
+      <span id="status">connecting…</span>
+      <button id="share" title="Copy a link to this plan">share link</button>
+    </div>
+
+    <div id="guests" class="panel">
+      <header>
+        <div class="kind">guests</div>
+        <h2>Guest list<small id="counts"></small></h2>
+        <form class="add" id="addForm">
+          <input id="guestName" placeholder="Add a guest…" autocomplete="off" />
+          <button class="primary" type="submit">add</button>
+        </form>
+        <div class="tools">
+          <input id="filter" placeholder="find…" autocomplete="off" />
+          <button id="bulkToggle" title="Paste a list, one name per line">paste list</button>
+        </div>
+      </header>
+      <div id="bulk">
+        <textarea id="bulkText" placeholder="One guest per line&#10;Jenny Sheen&#10;Caleb Leung&#10;…"></textarea>
+        <div class="row"><button id="bulkCancel">cancel</button><button id="bulkAdd" class="primary">add all</button></div>
+      </div>
+      <div id="list"></div>
+    </div>
+    <div id="ghost"></div>
+
+    <div id="inspector" class="panel">
+      <header>
+        <div class="kind" id="tableKind">table</div>
+        <input id="tableName" />
+        <button class="close" id="closeInspector" title="Close (Esc)">×</button>
+      </header>
+      <div class="field">
+        <label>shape</label>
+        <div class="seg"><button id="shapeRound">round</button><button id="shapeRect">rectangle</button></div>
+        <label>seats</label>
+        <div class="stepper"><button id="seatsMinus">−</button><input id="seatsInput" type="number" min="0" max="20" /><button id="seatsPlus">+</button></div>
+        <label id="rotLabel">layout</label>
+        <div class="seg" id="rotRow">
+          <button id="rotTurn" title="Turn the table a quarter">turn</button>
+          <button id="rotSides" title="Chairs on both long sides, or only one side (a head table): below/east, then above/west">both sides</button>
+        </div>
+      </div>
+      <div class="seats" id="seatList"></div>
+      <footer>
+        <button id="centerTable">centre on it</button>
+        <button id="clearTable" title="Send everyone at this table back to the list">clear</button>
+        <button id="deleteTable" class="danger">remove table</button>
+      </footer>
+    </div>
+
+    <div id="hover"></div>
+    <div id="toast"></div>
+    <div id="hint">drag to pan · wheel to zoom · drag tables to place them · drag a guest onto a chair, or click a guest then a table · <b>F</b> fit · <b>P</b> plan · <b>Esc</b> deselect</div>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>
