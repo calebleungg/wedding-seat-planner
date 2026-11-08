@@ -27,3 +27,4 @@ game.scene.add('plan', scene, true, { store, events: ui.events });
 ui.attach(scene);
 // handy in the browser console
 (window as unknown as { game: Phaser.Game }).game = game;
+(window as unknown as { store: Store }).store = store;

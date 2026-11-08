@@ -62,6 +62,9 @@ export function bindUi(store: Store) {
       hover.textContent = text;
       hover.style.display = 'block';
     },
+    notify(text) {
+      say(text);
+    },
   };
   window.addEventListener('mousemove', (e) => {
     hover.style.left = `${e.clientX + 14}px`;
@@ -174,6 +177,49 @@ export function bindUi(store: Store) {
     }
   }
 
+  // the chip being pressed or dragged, shared by one pair of window listeners
+  let chipDrag: { g: Guest; t?: Table; down: { x: number; y: number }; dragging: boolean } | null = null;
+  const ghost = $('ghost');
+  window.addEventListener('pointermove', (e) => {
+    const d = chipDrag;
+    if (!d) return;
+    if (!d.dragging && Math.hypot(e.clientX - d.down.x, e.clientY - d.down.y) > 6) {
+      d.dragging = true;
+      ghost.textContent = d.g.name;
+      ghost.style.display = 'block';
+      document.body.style.cursor = 'grabbing';
+    }
+    if (d.dragging) {
+      ghost.style.left = `${e.clientX}px`;
+      ghost.style.top = `${e.clientY}px`;
+      if (scene) {
+        const w = scene.worldPoint(e.clientX, e.clientY);
+        scene.showDropTargetAt(w.x, w.y);
+      }
+    }
+  });
+  window.addEventListener('pointerup', (e) => {
+    const d = chipDrag;
+    if (!d) return;
+    chipDrag = null;
+    ghost.style.display = 'none';
+    document.body.style.cursor = '';
+    scene?.clearDropTarget();
+    const { g, t } = d;
+    if (!d.dragging) {
+      events.selectGuest(selectedGuest === g._id ? null : g._id);
+      if (t && scene) scene.centerOn(t.x, t.y);
+      return;
+    }
+    if (!scene) return;
+    const over = document.elementFromPoint(e.clientX, e.clientY);
+    if (over && over.closest('.panel')) return; // dropped back on a panel: nothing
+    const w = scene.worldPoint(e.clientX, e.clientY);
+    const hit = scene.seatAt(w.x, w.y);
+    if (hit) void store.seatGuest(g._id, hit.tableId, hit.seat).then((ok) => { if (ok === false) say('That table is full'); });
+    else if (t) void store.unseatGuest(g._id);
+  });
+
   function chip(g: Guest, t?: Table): HTMLElement {
     const el = document.createElement('div');
     el.className = 'chip' + (selectedGuest === g._id ? ' selected' : '');
@@ -213,54 +259,10 @@ export function bindUi(store: Store) {
       if (n && n.trim() && n.trim() !== g.name) void store.renameGuest(g._id, n.trim());
     };
     // click selects (then click a table); press-and-move drags onto the floor
-    let down: { x: number; y: number } | null = null;
-    let dragging = false;
     el.addEventListener('pointerdown', (e) => {
       if ((e.target as HTMLElement).tagName === 'BUTTON') return;
-      down = { x: e.clientX, y: e.clientY };
-      dragging = false;
+      chipDrag = { g, t, down: { x: e.clientX, y: e.clientY }, dragging: false };
     });
-    const ghost = $('ghost');
-    const move = (e: PointerEvent) => {
-      if (!down) return;
-      if (!dragging && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) {
-        dragging = true;
-        ghost.textContent = g.name;
-        ghost.style.display = 'block';
-        document.body.style.cursor = 'grabbing';
-      }
-      if (dragging) {
-        ghost.style.left = `${e.clientX}px`;
-        ghost.style.top = `${e.clientY}px`;
-        if (scene) {
-          const w = scene.worldPoint(e.clientX, e.clientY);
-          scene.showDropTargetAt(w.x, w.y);
-        }
-      }
-    };
-    const up = (e: PointerEvent) => {
-      if (!down) return;
-      const wasDragging = dragging;
-      down = null;
-      dragging = false;
-      ghost.style.display = 'none';
-      document.body.style.cursor = '';
-      scene?.clearDropTarget();
-      if (!wasDragging) {
-        events.selectGuest(selectedGuest === g._id ? null : g._id);
-        if (t && scene) scene.centerOn(t.x, t.y);
-        return;
-      }
-      if (!scene) return;
-      const over = document.elementFromPoint(e.clientX, e.clientY);
-      if (over && over.closest('.panel')) return; // dropped back on a panel: nothing
-      const w = scene.worldPoint(e.clientX, e.clientY);
-      const hit = scene.seatAt(w.x, w.y);
-      if (hit) void store.seatGuest(g._id, hit.tableId, hit.seat).then((ok) => { if (ok === false) say('That table is full'); });
-      else if (t) void store.unseatGuest(g._id);
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
     return el;
   }
 

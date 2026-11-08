@@ -9,6 +9,7 @@ export interface SceneEvents {
   selectTable(id: Id<'tables'> | null): void;
   selectGuest(id: Id<'guests'> | null): void;
   hover(text: string | null, x: number, y: number): void;
+  notify(text: string): void;
 }
 
 interface Character {
@@ -373,13 +374,16 @@ export class PlanScene extends Phaser.Scene {
       if (c) {
         this.dragCharacter = null;
         this.dragGhost.clear();
+        this.ui.selectGuest(null);
+        this.ui.hover(null, 0, 0);
         const w = cam.getWorldPoint(p.x, p.y);
         const hit = this.seatAt(w.x, w.y);
-        if (hit) void this.store.seatGuest(c.id, hit.tableId, hit.seat);
+        if (hit) void this.store.seatGuest(c.id, hit.tableId, hit.seat).then((ok) => { if (ok === false) this.ui.notify('That table is full'); });
         else void this.store.unseatGuest(c.id);
         // snap back meanwhile; the next state update settles it
         const g = this.store.guest(c.id);
-        if (g) this.placeCharacter(c, g, true);
+        if (g) this.upsertGuest(g);
+        if (g?.tableId) this.placeCharacter(c, g, true);
       }
     });
 
@@ -527,7 +531,7 @@ export class PlanScene extends Phaser.Scene {
         if (this.selectedGuest) {
           const w = this.cameras.main.getWorldPoint(p.x, p.y);
           const seat = nearestSeat(t.shape, t.seats, t.rotation, w.x - view!.container.x, w.y - view!.container.y, 26);
-          void this.store.seatGuest(this.selectedGuest as Id<'guests'>, t._id, seat >= 0 ? seat : undefined);
+          void this.store.seatGuest(this.selectedGuest as Id<'guests'>, t._id, seat >= 0 ? seat : undefined).then((ok) => { if (ok === false) this.ui.notify('That table is full'); });
           this.ui.selectGuest(null);
           return;
         }
@@ -576,7 +580,7 @@ export class PlanScene extends Phaser.Scene {
       label.setPosition(0, r * 0.45);
       count.setPosition(0, r * 0.45 + 14);
       zone.setSize(r * 2 + 24, r * 2 + 24);
-      zone.setInteractive(new Phaser.Geom.Circle((r * 2 + 24) / 2, (r * 2 + 24) / 2, r + 12), Phaser.Geom.Circle.Contains, { draggable: true, useHandCursor: true } as never);
+      this.setHitArea(zone, new Phaser.Geom.Circle((r * 2 + 24) / 2, (r * 2 + 24) / 2, r + 12), Phaser.Geom.Circle.Contains);
     } else {
       const one = isOneSided(t.rotation);
       const size = rectSize(t.seats, one);
@@ -600,7 +604,7 @@ export class PlanScene extends Phaser.Scene {
       if (!vertical) label.setPosition(0, h / 2 + (one ? 12 : -14) + (one ? 0 : 0));
       count.setPosition(label.x, label.y + 14);
       zone.setSize(w + 28, h + 28);
-      zone.setInteractive(new Phaser.Geom.Rectangle(0, 0, w + 28, h + 28), Phaser.Geom.Rectangle.Contains, { draggable: true, useHandCursor: true } as never);
+      this.setHitArea(zone, new Phaser.Geom.Rectangle(0, 0, w + 28, h + 28), Phaser.Geom.Rectangle.Contains);
     }
     this.input.setDraggable(zone, true);
     label.setText(t.name);
@@ -613,6 +617,20 @@ export class PlanScene extends Phaser.Scene {
     for (const g of this.store.guestsAt(t._id)) {
       const ch = this.characters.get(g._id);
       if (ch) this.placeCharacter(ch, g, true);
+    }
+  }
+
+  /**
+   * Gives a zone a new hit area. A repeat setInteractive keeps the old shape, and
+   * removeInteractive only takes effect a frame later (undoing a setInteractive made in the same
+   * frame), so an existing interactive object is updated in place.
+   */
+  private setHitArea(zone: Phaser.GameObjects.Zone, shape: Phaser.Geom.Circle | Phaser.Geom.Rectangle, contains: (shape: never, x: number, y: number) => boolean) {
+    if (zone.input) {
+      zone.input.hitArea = shape;
+      zone.input.hitAreaCallback = contains as unknown as Phaser.Types.Input.HitAreaCallback;
+    } else {
+      zone.setInteractive({ hitArea: shape, hitAreaCallback: contains as unknown as Phaser.Types.Input.HitAreaCallback, useHandCursor: true });
     }
   }
 
@@ -652,6 +670,7 @@ export class PlanScene extends Phaser.Scene {
 
   private upsertGuest(g: Guest) {
     let ch = this.characters.get(g._id);
+    if (ch && ch === this.dragCharacter) return; // settled on drop
     if (ch && ch.sheet !== this.sheetFor(g)) {
       // a new look: swap the sheet in place
       ch.sheet = this.sheetFor(g);
@@ -752,7 +771,14 @@ export class PlanScene extends Phaser.Scene {
     for (const ch of this.characters.values()) {
       if (ch === this.dragCharacter) continue;
       if (ch.path.length === 0) {
-        if (ch.leaving) { ch.sprite.destroy(); this.characters.delete(ch.id); continue; }
+        if (ch.leaving) {
+          // the label follows the pointer, not the sprite, so it needs clearing by hand
+          if (ch.sprite.input?.enabled && this.input.activePointer && ch.sprite.getBounds().contains(this.input.activePointer.worldX, this.input.activePointer.worldY)) this.ui.hover(null, 0, 0);
+          ch.sprite.destroy();
+          this.characters.delete(ch.id);
+          if (this.selectedGuest === ch.id) this.drawHighlight();
+          continue;
+        }
         if (!ch.sitting) {
           const g = this.store.guest(ch.id);
           if (g) this.placeCharacter(ch, g, true);
