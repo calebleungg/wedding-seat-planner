@@ -35,6 +35,8 @@ interface TableView {
   shadow: Phaser.GameObjects.Graphics;
   signature: string;
   dragging: boolean;
+  /** where the container was when the current drag began */
+  dragFrom: { x: number; y: number };
 }
 
 const WALK = 110; // px/s
@@ -324,14 +326,22 @@ export class PlanScene extends Phaser.Scene {
     // tables and characters are dragged
     this.input.on('dragstart', (_p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject) => {
       const t = this.tableOf(obj);
-      if (t) { t.dragging = true; t.container.setDepth(90000); this.select(t.id); return; }
+      if (t) {
+        t.dragging = true;
+        t.dragFrom = { x: t.container.x, y: t.container.y };
+        t.container.setDepth(90000);
+        this.select(t.id);
+        return;
+      }
       const c = this.characterOf(obj);
       if (c) { this.dragCharacter = c; c.sprite.setDepth(90001); this.ui.selectGuest(c.id); }
     });
     this.input.on('drag', (p: Phaser.Input.Pointer, obj: Phaser.GameObjects.GameObject, dx: number, dy: number) => {
       const t = this.tableOf(obj);
       if (t) {
-        t.container.setPosition(Math.round(dx), Math.round(dy));
+        // the zone is a container child, so Phaser's dragX/dragY are its local position: an offset
+        // from where the drag started (the zone sits at the container's origin)
+        t.container.setPosition(Math.round(t.dragFrom.x + dx), Math.round(t.dragFrom.y + dy));
         this.drawHighlight();
         return;
       }
@@ -503,7 +513,7 @@ export class PlanScene extends Phaser.Scene {
       const zone = this.add.zone(0, 0, 10, 10).setOrigin(0.5);
       zone.setData('tableId', t._id);
       container.add([shadow, chairs, top, label, count, zone]);
-      view = { id: t._id, container, top, chairs, label, count, zone, shadow, signature: '', dragging: false };
+      view = { id: t._id, container, top, chairs, label, count, zone, shadow, signature: '', dragging: false, dragFrom: { x, y } };
       this.tables.set(t._id, view);
       zone.on('pointerover', () => this.ui.hover(`${t.name} · ${this.store.guestsAt(t._id).length}/${this.store.table(t._id)?.seats ?? t.seats} seated`, 0, 0));
       zone.on('pointerout', () => this.ui.hover(null, 0, 0));
